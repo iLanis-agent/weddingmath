@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeddingMath - the budget against the guest list</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#181015; color:#f5edf1; min-height:100vh; }
+  .wrap { max-width:860px; margin:0 auto; padding:28px 20px 80px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  header h1 { font-size:22px; } header h1 span { color:#e08aa8; }
+  header a { color:#a48f9c; text-decoration:none; font-size:14px; }
+  .card { background:#211720; border:1px solid #4c3044; border-radius:12px; padding:18px; margin-bottom:18px; }
+  label { font-size:12px; color:#a48f9c; display:block; margin-bottom:4px; }
+  input { background:#181015; border:1px solid #5d3c53; border-radius:8px; color:#f5edf1; padding:9px 10px; font-size:14px; width:100%; }
+  button { background:#e08aa8; border:none; color:#2b0e1c; font-weight:700; padding:11px 22px; border-radius:9px; font-size:14px; cursor:pointer; }
+  .row4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+  h3 { font-size:14px; color:#d4bfc9; margin-bottom:10px; }
+  .verdict { background:#281420; border:1px solid #5d3549; border-radius:10px; padding:14px 16px; margin-bottom:14px; font-size:15px; line-height:1.6; }
+  .verdict b { color:#e08aa8; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .stat { background:#181015; border:1px solid #4c3044; border-radius:10px; padding:12px; }
+  .stat .v { font-size:20px; font-weight:700; color:#fff; }
+  .stat .k { font-size:11px; color:#a48f9c; margin-top:2px; line-height:1.4; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:right; padding:7px 8px; border-bottom:1px solid #3a2536; }
+  th { color:#a48f9c; font-weight:600; }
+  td:first-child, th:first-child { text-align:left; }
+  .bar { display:inline-block; height:8px; border-radius:4px; background:#e08aa8; vertical-align:middle; margin-left:8px; }
+  .err { color:#ff8a8a; font-size:13px; margin-top:8px; }
+  .note { color:#6e5c66; font-size:12px; margin-top:10px; }
+  @media (max-width:640px){ .row4 { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Wedding<span>Math</span></h1><a href="index.html">home</a></header>
+
+  <div class="card">
+    <h3>The two numbers that run the day</h3>
+    <div class="row4">
+      <div><label>Total budget ($)</label><input id="bud" type="number" value="30000"></div>
+      <div><label>Guests</label><input id="gst" type="number" value="100"></div>
+      <div><label>Catering per head ($)</label><input id="ph" type="number" value="95"></div>
+      <div><label>Party length (hours)</label><input id="hrs" type="number" value="5"></div>
+    </div>
+    <button id="go">Split the budget</button>
+    <div class="err" id="err"></div>
+    <div class="note">Per-head = food + drink per guest at your venue tier (backyard ~$40, standard ~$95, black-tie ~$180+). Everything else is split by planner-standard weights, contingency included.</div>
+  </div>
+
+  <div id="out" style="display:none">
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="card">
+      <h3>Where it goes</h3>
+      <table id="tbl">
+        <thead><tr><th>Category</th><th>Budget</th><th>Share</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="note">Catering is computed from chairs, not weights - it always comes off the top first.</div>
+    </div>
+  </div>
+    <div class="card">
+      <h3>The line items that ambush couples</h3>
+      <div class="note" style="font-size:13px;line-height:1.8">
+        Service charges and tax on the catering quote (often +25% on top of the plate price). Vendor meals -
+        your photographer and DJ eat too, at vendor-plate prices. Alterations, which live outside the dress
+        budget. Overtime rates when the party runs one hour past the contract. The marriage license itself,
+        the officiant, and the rehearsal dinner nobody budgeted. And the tips: hair, makeup, drivers, delivery
+        crews - a stack of envelopes that adds up to a category of its own, which is why the split above
+        carries misc and a real contingency instead of a round number that pretends to be exact.
+      </div>
+    </div>
+  </div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  var F = ['bud','gst','ph','hrs'];
+  var KEY = 'weddingmath-settings';
+  function save(){ var o={}; F.forEach(function(f){o[f]=document.getElementById(f).value;}); try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){} }
+  function load(){ try{ var o=JSON.parse(localStorage.getItem(KEY)||'null'); if(o) F.forEach(function(f){ if(o[f]!==undefined) document.getElementById(f).value=o[f]; }); }catch(e){} }
+  function fmt$(n){ return '$' + Number(n).toLocaleString('en-US',{maximumFractionDigits:0}); }
+  function run(){
+    var errEl = document.getElementById('err'); errEl.textContent = '';
+    var o = {
+      budget: document.getElementById('bud').value,
+      guests: document.getElementById('gst').value,
+      perHead: document.getElementById('ph').value,
+      partyHours: document.getElementById('hrs').value
+    };
+    var r;
+    try { r = WeddingMathEngine.analyze(o); } catch(e){ errEl.textContent = e.message; return; }
+    save();
+    var v = document.getElementById('verdict');
+    var msg;
+    if (r.verdict === 'over') {
+      msg = 'Stop: catering alone - ' + fmt$(r.catering) + ' for ' + r.guests + ' guests - is <b>' + fmt$(r.overBy) + ' over your entire budget</b>. Cut ' + Math.ceil(r.overBy / (o.perHead || 1)) + ' guests, find a cheaper plate, or raise the budget.';
+    } else if (r.verdict === 'catering-heavy') {
+      msg = 'Catering takes <b>' + r.cateringPct + '% of the budget</b> (' + fmt$(r.catering) + '), which starves everything else. For a healthy split at ' + r.guests + ' guests, the plate price needs to land at or under <b>$' + r.maxPerHeadForFit + '</b>.';
+    } else {
+      msg = 'Catering takes ' + fmt$(r.catering) + ' (' + r.cateringPct + '%), leaving <b>' + fmt$(r.remainingForRest) + '</b> for everything else - a workable split. The day costs <b>' + fmt$(r.costPerGuestHour) + ' per guest per hour</b>.';
+    }
+    v.innerHTML = msg;
+    var s = document.getElementById('stats');
+    s.innerHTML = '';
+    var cells = [
+      [fmt$(r.catering), 'catering total (' + r.cateringPct + '% of budget)'],
+      [fmt$(r.remainingForRest), 'left for everything else'],
+      [fmt$(r.costPerGuest), 'budget per guest'],
+      [fmt$(r.costPerGuestHour), 'per guest per party hour'],
+      ['$' + r.maxPerHeadForFit, 'max plate price for a healthy split'],
+      [r.verdict === 'over' ? fmt$(r.overBy) + ' over' : 'fits', 'does the plate fit?']
+    ];
+    cells.forEach(function(c){
+      var d = document.createElement('div'); d.className = 'stat';
+      d.innerHTML = '<div class="v">' + c[0] + '</div><div class="k">' + c[1] + '</div>';
+      s.appendChild(d);
+    });
+    var tb = document.querySelector('#tbl tbody'); tb.innerHTML = '';
+    var maxAmt = 0;
+    r.rows.forEach(function(x){ if (x.amount > maxAmt) maxAmt = x.amount; });
+    var catRow = document.createElement('tr');
+    catRow.innerHTML = '<td><b>Catering (per-head x guests)</b></td><td><b>' + fmt$(r.catering) + '</b></td><td>' + r.cateringPct + '%</td><td><span class="bar" style="width:' + (maxAmt ? Math.round(r.catering / Math.max(maxAmt, r.catering) * 120) : 0) + 'px"></span></td>';
+    tb.appendChild(catRow);
+    r.rows.forEach(function(x){
+      var tr = document.createElement('tr');
+      var w = maxAmt ? Math.round(x.amount / Math.max(maxAmt, r.catering) * 120) : 0;
+      tr.innerHTML = '<td>' + x.category + '</td><td>' + fmt$(x.amount) + '</td><td>' + x.pct + '%</td><td><span class="bar" style="width:' + w + 'px"></span></td>';
+      tb.appendChild(tr);
+    });
+    document.getElementById('out').style.display = 'block';
+  }
+  document.getElementById('go').addEventListener('click', run);
+  load();
+})();
+</script>
+</body>
+</html>
